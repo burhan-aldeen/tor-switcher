@@ -5,9 +5,8 @@
 # ============================================
 # Usage:
 #   tor_switcher setup   - full install + configure
-#   tor_switcher on      - enable Tor system proxy
-#   tor_switcher off     - restore normal network
-#   tor_switcher rotator - rotate IP every 10s
+#   tor_switcher on      - enable Tor proxy + rotate IP every 10s
+#   tor_switcher off     - restore normal network + stop rotator
 #   tor_switcher status  - check Tor status
 # ============================================
 
@@ -43,10 +42,11 @@ create_rotator() {
 #!/bin/bash
 COOKIE="/run/tor/control.authcookie"
 INTERVAL=10
+LOG="$HOME/.tor_rotator.log"
 while true; do
     HEX=$(sudo xxd -p -c 32 "$COOKIE" 2>/dev/null)
     printf 'AUTHENTICATE %s\r\nSIGNAL NEWNYM\r\nQUIT\r\n' "$HEX" | nc 127.0.0.1 9051 2>/dev/null
-    echo "[$(date)] 🔄 IP rotated"
+    echo "[$(date)] 🔄 IP rotated" >> "$LOG"
     sleep $INTERVAL
 done
 RSEOF
@@ -59,12 +59,20 @@ proxy_on() {
     gsettings set org.gnome.system.proxy.socks host '127.0.0.1'
     gsettings set org.gnome.system.proxy.socks port 9050
     echo -e "${GREEN}[+] Tor proxy active${NC}"
-    echo -e "${YELLOW}[i] Test: curl --socks5 127.0.0.1:9050 ifconfig.me${NC}"
+
+    if [ ! -f "$ROTATOR" ]; then create_rotator; fi
+    # Kill old rotator if running
+    pkill -f "\.tor_rotator\.sh" 2>/dev/null
+    nohup bash "$ROTATOR" > /dev/null 2>&1 &
+    echo -e "${GREEN}[+] IP rotator started (every 10s)${NC}"
+    echo -e "${YELLOW}[i] Monitor: tail -f ~/.tor_rotator.log${NC}"
 }
 
 proxy_off() {
     echo -e "${GREEN}[+] Restoring default network...${NC}"
     gsettings set org.gnome.system.proxy mode 'none'
+    pkill -f "\.tor_rotator\.sh" 2>/dev/null
+    echo -e "${GREEN}[+] Rotator stopped${NC}"
     echo -e "${GREEN}[+] Default restored${NC}"
 }
 
@@ -87,8 +95,7 @@ case "$1" in
         status
         echo ""
         echo -e "${GREEN}✔ Setup complete!${NC}"
-        echo "  tor_switcher on       → enable system proxy"
-        echo "  tor_switcher rotator & → rotate IP every 10s"
+        echo "  tor_switcher on       → enable proxy + auto rotate IP"
         echo "  tor_switcher off      → restore normal"
         ;;
     on)
@@ -97,14 +104,6 @@ case "$1" in
     off)
         proxy_off
         ;;
-    rotator)
-        if [ ! -f "$ROTATOR" ]; then
-            echo -e "${YELLOW}[*] Creating rotator script...${NC}"
-            create_rotator
-        fi
-        echo -e "${YELLOW}[*] Rotating IP every 10s...${NC}"
-        exec "$ROTATOR"
-        ;;
     status)
         status
         ;;
@@ -112,10 +111,9 @@ case "$1" in
         echo "Tor Switcher - Complete Tor Automation"
         echo ""
         echo "Usage: tor_switcher COMMAND"
-        echo "  setup   - full install Tor + configure + create rotator"
-        echo "  on      - enable Tor as system-wide proxy"
-        echo "  off     - restore normal network settings"
-        echo "  rotator - rotate Tor exit IP every 10 seconds"
-        echo "  status  - check Tor SOCKS/Control listeners + current IP"
+        echo "  setup   - full install Tor + configure"
+        echo "  on      - enable Tor proxy + auto IP rotation every 10s"
+        echo "  off     - disable proxy + stop rotator"
+        echo "  status  - check Tor listeners + current IP"
         ;;
 esac

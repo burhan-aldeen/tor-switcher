@@ -10,23 +10,20 @@ Automate everything from zero: install Tor, configure ControlPort for circuit sw
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/adx0/tor-switcher.git
+git clone https://github.com/burhan-aldeen/tor-switcher.git
 cd tor-switcher
 chmod +x tor_switcher.sh
 
-# 2. Full auto setup (install Tor + configure + start)
+# 2. Full auto setup (install Tor + configure)
 sudo ./tor_switcher setup
 
-# 3. Enable system-wide Tor proxy
+# 3. Enable Tor proxy + auto IP rotation
 ./tor_switcher on
 
-# 4. Rotate IP every 10 seconds
-./tor_switcher rotator &
-
-# 5. Done — verify
+# 4. Verify
 curl --socks5 127.0.0.1:9050 ifconfig.me
 
-# 6. Restore normal network
+# 5. Restore normal network
 ./tor_switcher off
 ```
 
@@ -42,10 +39,9 @@ bash <(curl -s https://raw.githubusercontent.com/adx0/tor-switcher/main/tor_swit
 
 | Command | Description |
 |---------|-------------|
-| `setup` | Install Tor, write torrc, start service, create rotator |
-| `on` | Enable SOCKS5 proxy system-wide via gsettings |
-| `off` | Restore default network settings (no proxy) |
-| `rotator` | Send NEWNYM signal every 10s to change exit IP |
+| `setup` | Install Tor, write torrc, start service |
+| `on` | Enable SOCKS5 proxy + start IP rotation (every 10s) |
+| `off` | Restore default network + stop rotator |
 | `status` | Show Tor listeners + current exit IP |
 
 ---
@@ -59,13 +55,15 @@ bash <(curl -s https://raw.githubusercontent.com/adx0/tor-switcher/main/tor_swit
 │ setup → installs tor + writes /etc/tor/torrc    │
 │         with ControlPort 9051 + CookieAuth       │
 ├─────────────────────────────────────────────────┤
-│ on    → gsettings set system proxy = SOCKS5:9050 │
-├─────────────────────────────────────────────────┤
-│ off   → gsettings set proxy = none               │
-├─────────────────────────────────────────────────┤
-│ rotator → connects to ControlPort 9051           │
-│           sends NEWNYM every 10 seconds          │
-│           changes Tor exit node → new IP         │
+│ on    → gsettings set system proxy = SOCKS5:9050  │
+│         + starts IP rotator in background         │
+├──────────────────────────────────────────────────┤
+│ off   → gsettings set proxy = none                │
+│         + kills rotator process                   │
+├──────────────────────────────────────────────────┤
+│ rotator (auto via on) → connects to ControlPort   │
+│           sends NEWNYM every 10 seconds            │
+│           changes Tor exit node → new IP           │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -137,9 +135,10 @@ $ tor_switcher on
 [+] Enabling Tor proxy...
 [+] Tor proxy active
 
-$ tor_switcher rotator &
-[1] 12345
-[*] Rotating IP every 10s...
+$ tor_switcher on
+[+] Enabling Tor proxy...
+[+] Tor proxy active
+[+] IP rotator started (every 10s)
 [Fri Jun  5 04:30:00 CEST 2026] 🔄 IP rotated → 87.118.116.103
 [Fri Jun  5 04:30:10 CEST 2026] 🔄 IP rotated → 64.190.76.13
 [Fri Jun  5 04:30:20 CEST 2026] 🔄 IP rotated → 192.42.116.45
